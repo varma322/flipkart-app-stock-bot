@@ -6,7 +6,7 @@ from bot.address_switcher import select_saved_address
 from bot.constants import FLIPKART_PKG
 from bot.appium_driver import create_driver
 from bot.flipkart_app_checker import open_product, detect_state, get_price, close_popups, save_screenshot, SessionDeadError
-from bot.telegram_notifier import send_telegram
+from bot.telegram_notifier import send_telegram, send_telegram_photo
 from bot.scheduler import sleep_random
 from bot.telegram_bot import TelegramCommandBot
 import bot.database as db
@@ -92,17 +92,17 @@ def main():
                     now        = time.time()
                     last_alert = cur.get("last_alert", 0)
 
-                    # UNKNOWN / AMBIGUOUS
+                    # UNKNOWN / AMBIGUOUS — save screenshot and send it to Telegram
                     if status in ["UNKNOWN", "AMBIGUOUS"]:
                         path = save_screenshot(driver, f"{status.lower()}_{addr}")
-                        send_telegram(
-                            f"⚠ {status} UI detected\n"
-                            f"{name}\n"
-                            f"Address: {addr}\n"
-                            f"Price: {price}\n"
-                            f"Screenshot: {path}\n"
-                            f"{url}"
+                        caption = (
+                            f"⚠️ {status} UI detected\n"
+                            f"📦 {name}\n"
+                            f"📍 Address: {addr}\n"
+                            f"💰 Price: {price if price else '—'}\n"
+                            f"🔗 {url}"
                         )
+                        send_telegram_photo(path, caption=caption)
                         continue
 
                     if status in ["OUT_OF_STOCK", "NOT_DELIVERABLE"]:
