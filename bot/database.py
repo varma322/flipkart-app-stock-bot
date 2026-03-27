@@ -148,20 +148,47 @@ def add_product(name: str, url: str, target_price: int = 999999999) -> bool:
             return True
 
 
-def remove_product(name_query: str) -> str | None:
+def find_products_by_name(name_query: str) -> list[dict]:
     """
-    Soft-delete the first product whose name matches (case-insensitive substring).
-    Returns the matched product name, or None if not found.
+    Return all enabled products whose name contains name_query (case-insensitive).
+    Each dict has 'id' and 'name'.
+    """
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT id, name FROM products WHERE enabled=1 AND LOWER(name) LIKE LOWER(?)",
+            (f"%{name_query}%",)
+        ).fetchall()
+        return [{"id": r["id"], "name": r["name"]} for r in rows]
+
+
+def remove_product_by_id(product_id: int) -> str | None:
+    """
+    Soft-delete a product by exact ID.
+    Returns the product name, or None if not found.
     """
     with _conn() as con:
         row = con.execute(
-            "SELECT id, name FROM products WHERE enabled=1 AND LOWER(name) LIKE LOWER(?)",
-            (f"%{name_query}%",)
+            "SELECT id, name FROM products WHERE enabled=1 AND id=?",
+            (product_id,)
         ).fetchone()
         if not row:
             return None
         con.execute("UPDATE products SET enabled=0 WHERE id=?", (row["id"],))
         return row["name"]
+
+
+def remove_product(name_query: str) -> str | None:
+    """
+    Soft-delete the first product whose name matches (case-insensitive substring).
+    Returns the matched product name, or None if not found.
+    Kept for backwards compatibility — prefer find_products_by_name + remove_product_by_id.
+    """
+    matches = find_products_by_name(name_query)
+    if not matches:
+        return None
+    with _conn() as con:
+        con.execute("UPDATE products SET enabled=0 WHERE id=?", (matches[0]["id"],))
+        return matches[0]["name"]
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ webhook or public IP required.
 
 Supported commands (only accepted from TELEGRAM_CHAT_ID):
   /add   Name | URL | target_price   — add product to watchlist
-  /remove name                        — remove by partial name match
+  /remove name                        — remove by partial name; lists choices if ambiguous
   /list                               — show all watched products
   /status                             — last scrape result per product × address
 """
@@ -88,12 +88,35 @@ def _cmd_add(args: str) -> str:
 
 
 def _cmd_remove(args: str) -> str:
+    parts = args.strip().split(None, 1)
+
+    # --- Case 1: /remove #<id>  (user picked from a disambiguation list) ---
+    if len(parts) == 1 and parts[0].lstrip("#").isdigit():
+        product_id = int(parts[0].lstrip("#"))
+        matched = db.remove_product_by_id(product_id)
+        if matched:
+            return f"✅ Removed: {matched}"
+        return f"❌ No enabled product with ID {product_id}."
+
+    # --- Case 2: /remove <name query> ---
     if not args.strip():
-        return "Usage: /remove <partial name>\nExample: /remove Instax"
-    matched = db.remove_product(args.strip())
-    if matched:
-        return f"✅ Removed: {matched}"
-    return f"❌ No enabled product matching `{args.strip()}` found."
+        return "Usage: /remove <partial name>  or  /remove #<id>\nExample: /remove Instax"
+
+    query = args.strip()
+    matches = db.find_products_by_name(query)
+
+    if not matches:
+        return f"❌ No enabled product matching \"{query}\" found."
+
+    if len(matches) == 1:
+        db.remove_product_by_id(matches[0]["id"])
+        return f"✅ Removed: {matches[0]['name']}"
+
+    # Multiple matches — ask user to confirm with ID
+    lines = [f"⚠️ {len(matches)} products match \"{query}\". Reply with /remove #<id>:\n"]
+    for m in matches:
+        lines.append(f"  /remove #{m['id']} — {m['name']}")
+    return "\n".join(lines)
 
 
 def _cmd_list() -> str:
@@ -139,7 +162,7 @@ def _cmd_help() -> str:
         "🤖 *Flipkart Stock Bot Commands*\n\n"
         "/list              — Show watched products\n"
         "/add Name | URL | price  — Add a product\n"
-        "/remove Name       — Remove a product\n"
+        "/remove Name       — Remove a product (use #id if ambiguous)\n"
         "/status            — Last scrape results"
     )
 
